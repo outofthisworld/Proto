@@ -156,6 +156,12 @@
             dbName = "MyImports",
             dbVersion = 1;
 
+        var configuration = {
+            "iceServers": [{ "url": "stun:stun2.1.google.com:19302" }]
+        };
+
+        const yourConn = new webkitRTCPeerConnection(configuration);
+
         function createObjectStore(db) {
             console.log('creating object store')
             const objStore = db.createObjectStore('files', { keyPath: 'shaHash' });
@@ -462,12 +468,137 @@
             };
         })
 
+
+        /*        
+        socket.on('fileRequest', function (data) {
+            console.dir('recieved file request')
+            console.dir(data);
+            console.log('my id is:')
+            console.log(socket.id)
+
+            //Ask user if they want to allow a peer to open a connection to this file?
+            //Make an offer to that user...
+            const requester = data.requester;
+            const requestedFile = data.requestedFile;
+
+
+            var configuration = {
+                "iceServers": [{ "url": "stun:stun2.1.google.com:19302" }]
+            };
+
+            const yourConn = new webkitRTCPeerConnection(configuration,
+                { optional: [{ RtpDataChannels: true }] });
+
+            // Setup ice handling 
+            yourConn.onicecandidate = function (event) {
+                if (event.candidate) {
+                    send({
+                        type: "candidate",
+                        candidate: event.candidate
+                    });
+                    socket.emit('candidate', {
+                        candidate: event.candidate
+                    })
+                }
+            };
+
+            yourConn.createOffer(function (offer) {
+                send({
+                    type: "offer",
+                    offer: offer
+                });
+                yourConn.setLocalDescription(offer);
+
+            }, function (error) {
+                alert("Error when creating an offer");
+            });
+        })*/
+
+
+        //Handle requests for peer connection to file
+        socket.on('peerAccept', function (data) {
+            console.dir('recieved peer offer');
+            console.dir(data);
+
+            //data.offerer == where the offer came from
+            //data.owner == us (file owner)
+            //data.file == the file we are looking for
+            //data.offer == the offer
+            yourConn.setRemoteDescription(new RTCSessionDescription(data.offer));
+            // Setup ice handling 
+            yourConn.onicecandidate = function (event) {
+                console.log('ice candidate')
+                console.log(event)
+                if (event.candidate) {
+                    socket.emit('candidate', {
+                        candidate: event.candidate,
+                        to: data.offerer
+                    });
+                }
+            };
+            //create an answer to an offer 
+            yourConn.createAnswer(function (answer) {
+                yourConn.setLocalDescription(answer);
+                socket.emit('peerAnswer', {
+                    answer: answer,
+                    file: data.file,
+                    to: data.offerer
+                })
+            }, function (error) {
+                alert("Error when creating an answer");
+            });
+
+            dataChannel = yourConn.createDataChannel("channel1", { reliable: true });
+            dataChannel.onerror = function (error) {
+                console.log("Ooops...error:", error);
+            };
+            //when we receive a message from the other peer, display it on the screen 
+            dataChannel.onmessage = function (event) {
+                console.log('recieved message:')
+                console.dir(event)
+            };
+            dataChannel.onclose = function () {
+                console.log("data channel is closed");
+            };
+
+            setInterval(function () {
+                console.log(dataChannel.readyState)
+            }, 1000)
+        })
+
+        socket.on('candidate', function (data) {
+            console.log('adding candidate')
+            console.log(data)
+            yourConn.addIceCandidate(new RTCIceCandidate(data));
+        })
+
+        socket.on('peerAnswerAccept', function (data) {
+            console.log('peerAnswerAccept: ')
+            console.dir(data);
+            //data.from (where the answer came from)
+            yourConn.setRemoteDescription(new RTCSessionDescription(data.answer));
+            dataChannel = yourConn.createDataChannel("channel1", { reliable: true });
+
+            dataChannel.onerror = function (error) {
+                console.log("Ooops...error:", error);
+            };
+            //when we receive a message from the other peer, display it on the screen 
+            dataChannel.onmessage = function (event) {
+                console.log('recieved data from accepter:')
+                console.dir(event)
+            };
+            dataChannel.onclose = function () {
+                console.log("data channel is closed");
+            };
+        })
+
         socket.on('fileQueryResponse', function (data) {
             console.log(data)
             const files = data.files;
 
             console.log('found files...')
             console.log(JSON.stringify(files));
+            //We also need to get the descriptor
             console.log('they belong to!:')
             console.log(data.owner);
             //Now we have the socket id that the files belong to..
@@ -475,6 +606,63 @@
                 const div = document.createElement('div')
                 div.setAttribute('data-id', data.owner);
                 div.setAttribute('data-sha', f.shaHash);
+
+                ///Heheheh set up p2p
+                //Need signaling server
+                div.addEventListener('click', function () {
+
+                    //Example one:
+                    //We need to be able to send information to one user (data.id)
+                    //We also have to different constructs, the initiater
+                    //of an offer
+
+                    //In other words flow might be:
+                    //loop through each data-id owner
+                    //Send a request to the server, to send a request for them
+                    //to make an offer
+                    //They send to the server the session descriptor, along with our id
+                    //which then gets sent back to here, we can then accept the offer
+
+                    const owner = div.getAttribute('data-id');
+                    const sha = div.getAttribute('data-sha');
+
+                    // Setup ice handling 
+                    yourConn.onicecandidate = function (event) {
+                        if (event.candidate) {
+                            socket.emit('candidate', {
+                                candidate: event.candidate,
+                                to: owner
+                            });
+                        }
+                    };
+
+                    yourConn.createOffer(function (offer) {
+                        socket.emit('peerOffer', {
+                            offer: offer,
+                            file: sha,
+                            owner,
+                            offerer: socket.id
+                        })
+                        yourConn.setLocalDescription(offer);
+                    }, function (error) {
+                        alert("Error when creating an offer");
+                    });
+                    /*
+                    const xmlHttpRequest = new XMLHttpRequest();
+
+                    xmlHttpRequest.onload = function (e) {
+                        console.log('success send file')
+                    }
+
+                    xmlHttpRequest.onerror = function (e) {
+                        console.log('err req file')
+                    }
+
+                    xmlHttpRequest.open('get', '/request/' + sha + '/' + owner + '/' + socket.id)
+                    xmlHttpRequest.send();*/
+
+                })
+
                 div.innerHTML = `
                     <div>${f.name}</div>
                     <div>${f.shaHash}</div>

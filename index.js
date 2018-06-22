@@ -51,12 +51,70 @@ app.get('/search/:file/:id',function(req,res){
     }
 })
 
+
+app.get('/request/:file/:fileOwner/:requester',function(req,res){
+    console.log('rec req for file')
+    //The file sha being requested
+    const requestedFile = req.params.file;
+    //The socket id to send the request to
+    const fileOwner = req.params.fileOwner;
+    const fileRequester = req.params.requester;
+    console.log('recieved request')
+    if(!requestedFile){
+        res.status(300).json({error:'Invalid file name'});
+    }else{
+        emitter.emit('sendToOne',{
+            id:fileOwner,
+            event:'fileRequest',
+            data:{
+                requestedFile,
+                requester:fileRequester
+            }
+        })
+        console.log('responding with ok:')
+        res.status(200).json({ok:'ok'});
+    }
+})
+
 io.on('connection', function(socket){
     console.log('a user connected id:');
     console.log(socket.id)
+
+    /*
+        event emitter
+    */
     emitter.on('sendToAll',function(msg){
         socket.emit(msg.event,msg.data);
     })
+
+    emitter.on('sendToOne',function(msg){
+        if(socket.id == msg.id){
+            socket.emit(msg.event,msg.data);
+        }
+    })
+
+    /*
+        Messages
+    */
+    socket.on('peerOffer',function(data){
+        data.offerer = socket.id;
+        io.to(data.owner).emit('peerAccept',data)
+    })
+   
+    socket.on('peerAnswer',function(data){
+        data.from = socket.id;
+        io.to(data.to).emit('peerAnswerAccept',data);
+    }) 
+
+    socket.on('candidate',function(candidate){
+        io.to(candidate.to).emit('candidate',candidate.candidate)
+    });
+
+    socket.on('acceptRequest',function(data){
+        io.to(data.id).emit('initiateP2P',{
+        })
+    });
+
     socket.on('filesFound',function(data){
         const files = data.files;
         console.log('recieved files found response')
@@ -66,7 +124,8 @@ io.on('connection', function(socket){
             //This person is the owner of these files
             owner:socket.id
         })
-    })
+    });
+
     socket.on('disconnect', function(){
         console.log('user disconnected');
     });
