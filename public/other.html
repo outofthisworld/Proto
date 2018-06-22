@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js"> <!--<![endif]-->
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <title></title>
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="">
+    </head>
+    <body>
+        <!--[if lt IE 7]>
+            <p class="browsehappy">You are using an <strong>outdated</strong> browser. Please <a href="#">upgrade your browser</a> to improve your experience.</p>
+        <![endif]-->
+
+        <input type="text" />
+        <button id="search">Search for files</button>
+        
+        <script src="">
+            
+            //Make the stuff to send
+            const sendObj = {
+                files: [
+                    'A book about',
+                    'Something about love',
+                    'Dont do this at home',
+                    'The reckoning',
+                    'Be attentive',
+                    'Dont stop doing that'
+                ]
+            }
+
+            /*
+                1: User request to search for a file
+                2: Request gets sent to server (via ajax or socket)
+                3: Server
+
+            */
+
+            const socket = io();
+            socket.on('checkForFile',function(){
+                const pingId = req.pingId;
+                const query = req.query;
+
+                const queryFiles = sendObj.files.filter(function(f){
+                    f.includes(query);
+                });
+
+                websocket.send('pingResponse',{
+                    pingId,
+                    queryFiles
+                })
+            })
+
+            socket.on('fileQueryResponse',function(data){
+                const files = data.files;
+                console.log('found files...')
+                console.alert(JSON.stringify(files));
+            });
+            
+        </script>
+    </body>
+</html>
